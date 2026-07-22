@@ -1,63 +1,67 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
+import requests
 import json
 import os
 
 app = Flask(__name__)
 
-# Load tokens
+# Load your real tokens
 auth_config = {"token": "", "refresh": ""}
 try:
     with open("sem.json", "r", encoding="utf-8") as f:
         auth_config = json.load(f)
-    print("✅ Loaded sem.json")
+    print("✅ Loaded real Steam tokens from sem.json")
 except:
-    print("⚠️ Using dummy token")
-    auth_config = {"token": "dummy-steam-token-for-quest", "refresh": "dummy-refresh"}
+    print("⚠️ sem.json not found - add it to Render")
+    auth_config = {"token": "", "refresh": ""}
+
+REAL_BACKEND = "https://animalcompany.us-east1.nakamacloud.io"
 
 @app.route('/health')
 def health():
-    return "OK"
+    return "Proxy OK"
 
-# Main Auth
+# Special Auth Endpoint
 @app.route('/v2/ANFCOASNOIODSNVOISDAHVOD', methods=['GET', 'POST'])
-def authenticate():
-    print("[AUTH] Main login")
-    return jsonify({
-        "success": True,
-        "user": {
-            "id": "e6e488cf-79e1-48ed-8008-2829065eaf73",
-            "username": "StandalonePlayer",
-            "display_name": "StandalonePlayer",
-            "steam_id": "76561199677913646"
-        },
-        "token": auth_config.get("token"),
-        "refreshToken": auth_config.get("refresh"),
-        "expiresIn": 7200
-    })
+def custom_auth():
+    print("[PROXY] Handling custom auth")
+    # Forward to real Steam auth
+    url = f"{REAL_BACKEND}/v2/account/authenticate/steam?create=true&sync=false"
+    headers = {
+        "Authorization": f"Bearer {auth_config.get('token')}",
+        "Content-Type": "application/json"
+    }
+    try:
+        resp = requests.post(url, headers=headers, json=request.json if request.is_json else None, timeout=10)
+        return Response(resp.content, resp.status_code, resp.headers.items())
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
-# All other /v2/ endpoints
-@app.route('/v2/<path:path>', methods=['GET', 'POST'])
-def v2_routes(path):
-    print(f"[V2] {request.method} /v2/{path}")
-    if "account" in path:
-        return jsonify({
-            "success": True,
-            "user": {
-                "id": "e6e488cf-79e1-48ed-8008-2829065eaf73",
-                "username": "StandalonePlayer",
-                "display_name": "StandalonePlayer",
-                "steam_id": "76561199677913646"
-            }
-        })
-    elif "mining.balance" in path or "wallet" in path:
-        return jsonify({"success": True, "balance": 9999})
-    elif "purchase" in path or "rpc" in path:
-        return jsonify({"success": True})
-    elif "storage" in path:
-        return jsonify({"success": True, "data": []})
-    else:
-        return jsonify({"success": True})
+# Proxy all other /v2/ requests
+@app.route('/v2/<path:path>', methods=['GET', 'POST', 'PUT'])
+def proxy_v2(path):
+    url = f"{REAL_BACKEND}/v2/{path}"
+    print(f"[PROXY] {request.method} /v2/{path}")
 
+    headers = dict(request.headers)
+    headers.pop("Host", None)
+    if auth_config.get("token"):
+        headers["Authorization"] = f"Bearer {auth_config.get('token')}"
+
+    try:
+        resp = requests.request(
+            method=request.method,
+            url=url,
+            headers=headers,
+            data=request.get_data(),
+            cookies=request.cookies,
+            timeout=15
+        )
+        return Response(resp.content, resp.status_code, resp.headers.items())
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 502
+
+# Catch-all
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def catch_all(path):
@@ -66,5 +70,5 @@ def catch_all(path):
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    print(f"🚀 Comprehensive Backend running on port {port}")
+    print(f"🚀 Real Proxy Backend running on port {port}")
     app.run(host='0.0.0.0', port=port)
