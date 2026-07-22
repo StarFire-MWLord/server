@@ -6,46 +6,52 @@ app = Flask(__name__)
 
 # Load tokens
 auth_config = {"token": "", "refresh": ""}
-sem_path = os.path.join(os.path.dirname(__file__), "sem.json")
-
 try:
-    with open(sem_path, "r", encoding="utf-8") as f:
+    with open("sem.json", "r", encoding="utf-8") as f:
         auth_config = json.load(f)
     print("✅ Loaded sem.json")
 except Exception as e:
-    print(f"❌ Could not load sem.json: {e}")
+    print(f"❌ sem.json error: {e}")
 
 @app.route('/health')
 def health():
     return "OK"
 
-# Match the original weird authenticate endpoint
 @app.route('/v2/ANFCOASNOIODSNVOISDAHVOD', methods=['GET', 'POST'])
 def authenticate():
-    print(f"[AUTH] {request.method} {request.url}")
+    print(f"[AUTH] Received request")
     return jsonify({
         "success": True,
         "user": {
-            "id": "standalone-user",
-            "username": "Player",
-            "displayName": "Standalone"
+            "id": "quest-user",
+            "username": "StandalonePlayer",
+            "displayName": "Standalone",
+            "platform": "MetaQuest"
         },
         "token": auth_config.get("token"),
         "refreshToken": auth_config.get("refresh"),
-        "expiresIn": 7200
+        "expiresIn": 7200,
+        "metaQuestToken": "dummy-meta-token",
+        "account": {
+            "id": "quest-user",
+            "status": "active"
+        }
     })
 
-# General account routes
 @app.route('/v2/account', methods=['GET', 'POST'])
 @app.route('/v2/account/<path:path>', methods=['GET', 'POST'])
-def account_routes(path=None):
-    print(f"[ACCOUNT] {request.method} {request.url}")
+def account(path=""):
+    print(f"[ACCOUNT] {request.method} /v2/account/{path}")
     return jsonify({
         "success": True,
+        "user": {
+            "id": "quest-user",
+            "username": "StandalonePlayer",
+            "displayName": "Standalone"
+        },
         "data": {"status": "ok"}
     })
 
-# Catch all other requests
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def catch_all(path):
